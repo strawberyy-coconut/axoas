@@ -9,6 +9,11 @@ pub fn to_openapi_schema(schemars_schema: &schemars::Schema) -> Schema {
     serde_json::from_value(json).expect("Failed to deserialize openapi3_rs::Schema")
 }
 
+pub fn definition_to_openapi_schema(value: &serde_json::Value) -> Schema {
+    serde_json::from_value(value.clone())
+        .expect("Failed to deserialize schemars definition to openapi3_rs::Schema")
+}
+
 /// Generate a binary download response.
 pub fn binary_response(status: &str, content_type: &str, description: &str) -> (String, RefOr<Response>) {
     let mut content = IndexMap::new();

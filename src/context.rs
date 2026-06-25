@@ -19,7 +19,7 @@ pub struct GenContext {
 impl Default for GenContext {
     fn default() -> Self {
         Self {
-            schema: SchemaGenerator::default(),
+            schema:  SchemaGenerator::new(schemars::generate::SchemaSettings::openapi3()),
             components: Components::default(),
             infer_error_responses: true,
         }

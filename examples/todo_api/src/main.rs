@@ -82,7 +82,9 @@ async fn list_todos(State(state): State<AppState>) -> axum::Json<Vec<Todo>> {
 #[openapi(
     tag = "todos",
     summary = "Create a new todo",
-    description = "Creates a todo and returns it with an assigned ID"
+    description = "Creates a todo and returns it with an assigned ID",
+    response(status = "201", type = Todo, description = "Todo created"),
+    response(status = "400", type = ErrorResponse, description = "Invalid title")
 )]
 async fn create_todo(
     State(state): State<AppState>,
@@ -201,14 +203,8 @@ async fn main() {
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Todo API at http://localhost:3000");
-    println!("  GET    /openapi.json   — OpenAPI spec");
-    println!("  GET    /api/todos       — List todos");
-    println!("  POST   /api/todos       — Create todo");
-    println!("  GET    /api/todos/{{id}}  — Get todo");
-    println!("  PUT    /api/todos/{{id}}  — Update todo");
-    println!("  DELETE /api/todos/{{id}}  — Delete todo");
-    println!("  GET    /api/health      — Health check");
+    println!("Todo API at http://localhost:3000/openapi.json");
+
 
     axum::serve(listener, app).await.unwrap();
 }
