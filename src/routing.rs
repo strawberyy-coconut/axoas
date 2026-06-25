@@ -35,6 +35,11 @@ define_routing_fn!(options);
 define_routing_fn!(trace);
 define_routing_fn!(connect);
 
+// Note: QUERY method support is available on DocMethodRouter (field `query`)
+// and PathItem, but axum 0.8 lacks native QUERY routing. Use
+// `axum::routing::on(MethodFilter::..., handler)` with a custom filter
+// if needed, and set `query` on DocMethodRouter manually.
+
 /// Route all HTTP methods to the given handler (uses fallback).
 pub fn any<H, T, S>(doc: DocHandler<H>) -> DocMethodRouter<S, Infallible>
 where
@@ -54,6 +59,7 @@ where
         options: Some(operation.clone()),
         trace: Some(operation.clone()),
         connect: Some(operation.clone()),
+        query: Some(operation.clone()),
         components,
     }
 }

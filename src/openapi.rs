@@ -27,7 +27,7 @@ pub fn binary_response(status: &str, content_type: &str, description: &str) -> (
 pub fn typed_response_schema<T: schemars::JsonSchema>(
     ctx: &mut crate::GenContext, status: &str, description: &str
 ) -> (String, RefOr<Response>) {
-    let schema = ctx.schema.subschema_for::<T>();
+    let schema = ctx.schema_gen.subschema_for::<T>();
     response_schema(&schema, status, description)
 }
 

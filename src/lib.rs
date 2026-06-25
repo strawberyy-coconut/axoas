@@ -34,14 +34,15 @@ pub mod openapi;
 pub mod router;
 pub mod routing;
 
-// Re-exports
+// Re-exports — axoas own types
 pub use axoas_macros::{openapi, route};
 pub use context::GenContext;
 pub use extract::OpenApiExtractor;
 pub use extract::OpenApiOutput;
 pub use handler::DocHandler;
-pub use indexmap;
 pub use method::DocMethodRouter;
-pub use openapi3_rs;
 pub use router::DocRouter;
-pub use schemars;
+
+// Re-exports — needed by the #[openapi] macro and extractor impls
+pub use indexmap;
+pub use openapi3_rs;

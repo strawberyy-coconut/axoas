@@ -49,11 +49,62 @@ impl OpenApiExtractor for axum::body::Body {
     fn operation_input(_: &mut GenContext, _: &mut Operation) {}
 }
 
+// --- Bytes (raw request body) ---
+
+impl OpenApiExtractor for axum::body::Bytes {
+    fn operation_input(_ctx: &mut GenContext, operation: &mut Operation) {
+        let mut content = IndexMap::new();
+        content.insert(
+            "application/octet-stream".to_string(),
+            MediaType {
+                schema: None,
+                ..Default::default()
+            },
+        );
+        operation.request_body = Some(RefOr::Item(RequestBody {
+            description: Some("Raw binary body".into()),
+            content,
+            required: Some(true),
+        }));
+    }
+}
+
+// --- RawQuery ---
+
+impl OpenApiExtractor for axum::extract::RawQuery {
+    fn operation_input(_ctx: &mut GenContext, operation: &mut Operation) {
+        // RawQuery consumes the entire query string; document as a querystring param.
+        let mut content = IndexMap::new();
+        content.insert(
+            "text/plain".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
+                    schema_data: {
+                        let mut m = serde_json::Map::new();
+                        m.insert("type".into(), "string".into());
+                        m
+                    },
+                    ..Default::default()
+                }))),
+                ..Default::default()
+            },
+        );
+        operation.parameters.get_or_insert_with(Vec::new).push(RefOr::Item(Parameter {
+            name: "query".into(),
+            location: ParameterIn::Querystring,
+            description: Some("Raw query string".into()),
+            required: Some(false),
+            content: Some(content),
+            ..Default::default()
+        }));
+    }
+}
+
 // --- Path<T> ---
 
 impl<T: JsonSchema> OpenApiExtractor for axum::extract::Path<T> {
     fn operation_input(ctx: &mut GenContext, operation: &mut Operation) {
-        let schema = ctx.schema.subschema_for::<T>();
+        let schema = ctx.schema_gen.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let params = parameters_from_schema(&openapi_schema, ParameterIn::Path);
         let existing = operation.parameters.get_or_insert_with(Vec::new);
@@ -68,7 +119,7 @@ impl<T: JsonSchema> OpenApiExtractor for axum::extract::Path<T> {
 
 impl<T: JsonSchema> OpenApiExtractor for axum::extract::Query<T> {
     fn operation_input(ctx: &mut GenContext, operation: &mut Operation) {
-        let schema = ctx.schema.subschema_for::<T>();
+        let schema = ctx.schema_gen.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let params = parameters_from_schema(&openapi_schema, ParameterIn::Query);
         let existing = operation.parameters.get_or_insert_with(Vec::new);
@@ -82,7 +133,7 @@ impl<T: JsonSchema> OpenApiExtractor for axum::extract::Query<T> {
 
 impl<T: JsonSchema> OpenApiExtractor for axum::Json<T> {
     fn operation_input(ctx: &mut GenContext, operation: &mut Operation) {
-        let schema = ctx.schema.subschema_for::<T>();
+        let schema = ctx.schema_gen.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
         content.insert(
@@ -134,7 +185,7 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Json<T> {
 
 impl<T: JsonSchema> OpenApiExtractor for axum::Form<T> {
     fn operation_input(ctx: &mut GenContext, operation: &mut Operation) {
-        let schema = ctx.schema.subschema_for::<T>();
+        let schema = ctx.schema_gen.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
         content.insert(
@@ -157,7 +208,7 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Form<T> {
 impl<T: JsonSchema> OpenApiOutput for axum::Json<T> {
     type Inner = T;
     fn operation_response(ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> {
-        let schema = ctx.schema.subschema_for::<T>();
+        let schema = ctx.schema_gen.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
         content.insert(
@@ -188,7 +239,7 @@ impl<T: JsonSchema> OpenApiOutput for axum::Json<T> {
 impl<T: JsonSchema> OpenApiOutput for (axum::http::StatusCode, axum::Json<T>) {
     type Inner = T;
     fn operation_response(ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> {
-        let schema = ctx.schema.subschema_for::<T>();
+        let schema = ctx.schema_gen.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
         content.insert(
@@ -200,6 +251,83 @@ impl<T: JsonSchema> OpenApiOutput for (axum::http::StatusCode, axum::Json<T>) {
         );
         Some(Response {
             description: "Successful response".to_string(),
+            content: Some(content),
+            ..Default::default()
+        })
+    }
+}
+
+// --- Plain text response ---
+
+impl OpenApiOutput for String {
+    type Inner = String;
+    fn operation_response(_ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> {
+        let mut content = IndexMap::new();
+        content.insert(
+            "text/plain".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
+                    schema_data: {
+                        let mut m = serde_json::Map::new();
+                        m.insert("type".into(), "string".into());
+                        m
+                    },
+                    ..Default::default()
+                }))),
+                ..Default::default()
+            },
+        );
+        Some(Response {
+            description: "Successful response".to_string(),
+            content: Some(content),
+            ..Default::default()
+        })
+    }
+}
+
+// --- Binary response ---
+
+impl OpenApiOutput for axum::body::Bytes {
+    type Inner = Vec<u8>;
+    fn operation_response(_ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> {
+        let mut content = IndexMap::new();
+        content.insert(
+            "application/octet-stream".to_string(),
+            MediaType {
+                schema: None,
+                ..Default::default()
+            },
+        );
+        Some(Response {
+            description: "Binary response".to_string(),
+            content: Some(content),
+            ..Default::default()
+        })
+    }
+}
+
+// --- HTML response ---
+
+impl<T: Send> OpenApiOutput for axum::response::Html<T> {
+    type Inner = T;
+    fn operation_response(_ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> {
+        let mut content = IndexMap::new();
+        content.insert(
+            "text/html".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
+                    schema_data: {
+                        let mut m = serde_json::Map::new();
+                        m.insert("type".into(), "string".into());
+                        m
+                    },
+                    ..Default::default()
+                }))),
+                ..Default::default()
+            },
+        );
+        Some(Response {
+            description: "HTML response".to_string(),
             content: Some(content),
             ..Default::default()
         })

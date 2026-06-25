@@ -10,8 +10,8 @@ use axum::response::IntoResponse;
 use axum::routing::Route;
 use indexmap::IndexMap;
 use openapi3_rs::{
-    Components, Info, OpenAPI, Operation, PathItem, RefOr, SecurityRequirement, SecurityScheme,
-    Server, Tag,
+    Components, ExternalDocumentation, Info, OpenAPI, Operation, PathItem, RefOr,
+    SecurityRequirement, SecurityScheme, Server, Tag,
 };
 use tower_layer::Layer;
 use tower_service::Service;
@@ -28,6 +28,14 @@ struct DocRouterInner<S> {
     components: Components,
     /// Global default security requirements applied to all operations.
     security: Option<Vec<SecurityRequirement>>,
+    /// The self-assigned URI of this document (OAS 3.2 `$self` field).
+    self_uri: Option<String>,
+    /// Default `$schema` dialect for Schema Objects (OAS 3.2 `jsonSchemaDialect`).
+    json_schema_dialect: Option<String>,
+    /// Incoming webhooks (OAS 3.1+ `webhooks` field).
+    webhooks: IndexMap<String, PathItem>,
+    /// Top-level external documentation.
+    external_docs: Option<ExternalDocumentation>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +66,10 @@ where
                 tags: Vec::new(),
                 components: Components::default(),
                 security: None,
+                self_uri: None,
+                json_schema_dialect: None,
+                webhooks: IndexMap::new(),
+                external_docs: None,
             }),
         }
     }
@@ -139,6 +151,10 @@ where
                 tags: self.inner.tags.clone(),
                 components: self.inner.components.clone(),
                 security: self.inner.security.clone(),
+                self_uri: self.inner.self_uri.clone(),
+                json_schema_dialect: self.inner.json_schema_dialect.clone(),
+                webhooks: self.inner.webhooks.clone(),
+                external_docs: self.inner.external_docs.clone(),
             }),
         }
     }
@@ -165,6 +181,50 @@ where
         inner.router = std::mem::take(&mut inner.router).fallback(handler);
         self
     }
+
+    /// Set the self-assigned URI of this OpenAPI document (OAS 3.2 `$self`).
+    ///
+    /// This serves as the base URI for resolving relative `$ref` URIs
+    /// within the document, in accordance with RFC 3986 §5.1.1.
+    pub fn with_self_uri(mut self, uri: &str) -> Self {
+        let inner = Arc::make_mut(&mut self.inner);
+        inner.self_uri = Some(uri.to_string());
+        self
+    }
+
+    /// Set the default `$schema` dialect for all Schema Objects (OAS 3.2 `jsonSchemaDialect`).
+    ///
+    /// This MUST be a URI. Individual Schema Objects can override it with their own
+    /// `$schema` keyword.
+    pub fn with_json_schema_dialect(mut self, dialect: &str) -> Self {
+        let inner = Arc::make_mut(&mut self.inner);
+        inner.json_schema_dialect = Some(dialect.to_string());
+        self
+    }
+
+    /// Register an incoming webhook (OAS 3.1+ `webhooks`).
+    ///
+    /// Webhooks describe incoming requests that MAY be received as part of this API,
+    /// initiated by the API provider rather than the consumer.
+    pub fn with_webhook(mut self, name: &str, path_item: PathItem) -> Self {
+        let inner = Arc::make_mut(&mut self.inner);
+        inner.webhooks.insert(name.to_string(), path_item);
+        self
+    }
+
+    /// Set top-level external documentation (OAS 3.2 `externalDocs`).
+    pub fn with_external_docs(mut self, url: &str, description: Option<&str>) -> Self {
+        let inner = Arc::make_mut(&mut self.inner);
+        inner.external_docs = Some(ExternalDocumentation {
+            url: url.to_string(),
+            description: description.map(String::from),
+        });
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // -- Pre-existing builder methods                                         --
+    // -----------------------------------------------------------------------
 
     pub fn with_info(mut self, info: Info) -> Self {
         let inner = Arc::make_mut(&mut self.inner);
@@ -229,15 +289,12 @@ where
 
     pub fn serve_openapi(self, path: &str) -> Self {
         let openapi_doc = self.openapi_doc();
-        let json = serde_json::to_string(&openapi_doc).unwrap_or_default();
+        let value: Arc<serde_json::Value> =
+            Arc::new(serde_json::to_value(&openapi_doc).unwrap_or_default());
 
         let handler = move || {
-            let json = json.clone();
-            async move {
-                axum::response::Json(
-                    serde_json::from_str::<serde_json::Value>(&json).unwrap_or_default(),
-                )
-            }
+            let v = Arc::clone(&value);
+            async move { axum::response::Json(v.as_ref().clone()) }
         };
 
         let router = axum::routing::get(handler);
@@ -255,12 +312,19 @@ where
         OpenAPI {
             openapi: "3.2.0".to_string(),
             info: self.inner.info.clone(),
+            self_uri: self.inner.self_uri.clone(),
+            json_schema_dialect: self.inner.json_schema_dialect.clone(),
             servers: if self.inner.servers.is_empty() {
                 None
             } else {
                 Some(self.inner.servers.clone())
             },
             paths: Some(self.inner.paths.clone()),
+            webhooks: if self.inner.webhooks.is_empty() {
+                None
+            } else {
+                Some(self.inner.webhooks.clone())
+            },
             components: Some(self.inner.components.clone()),
             security: self.inner.security.clone(),
             tags: if self.inner.tags.is_empty() {
@@ -268,6 +332,7 @@ where
             } else {
                 Some(self.inner.tags.clone())
             },
+            external_docs: self.inner.external_docs.clone(),
             ..Default::default()
         }
     }
@@ -286,6 +351,7 @@ pub(crate) fn merge_path_items(existing: &mut PathItem, new: PathItem) {
     if new.head.is_some() { existing.head = new.head; }
     if new.options.is_some() { existing.options = new.options; }
     if new.trace.is_some() { existing.trace = new.trace; }
+    if new.query.is_some() { existing.query = new.query; }
     if let Some(additional) = new.additional_operations {
         let existing_additional = existing
             .additional_operations
@@ -296,6 +362,15 @@ pub(crate) fn merge_path_items(existing: &mut PathItem, new: PathItem) {
     if new.description.is_some() { existing.description = new.description; }
     if new.servers.is_some() { existing.servers = new.servers; }
     if new.parameters.is_some() { existing.parameters = new.parameters; }
+}
+
+impl<S> Default for DocRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub(crate) fn format_nested_path(prefix: &str, nested_path: &str) -> String {

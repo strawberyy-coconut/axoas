@@ -3,7 +3,7 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    FnArg, ItemFn, Pat, PatType, ReturnType, Type, TypePath,
+    FnArg, ItemFn, Pat, ReturnType, Type, TypePath,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
@@ -14,6 +14,8 @@ struct OpenApiArgs {
     description: Option<String>,
     operation_id: Option<String>,
     deprecated: Option<bool>,
+    external_docs_url: Option<String>,
+    external_docs_description: Option<String>,
     responses: Vec<ResponseArg>,
 }
 
@@ -31,6 +33,8 @@ impl Parse for OpenApiArgs {
         let mut description = None;
         let mut operation_id = None;
         let mut deprecated = None;
+        let mut external_docs_url = None;
+        let mut external_docs_description = None;
         let mut responses = Vec::new();
         while !input.is_empty() {
             let key: syn::Ident = input.parse()?;
@@ -54,6 +58,25 @@ impl Parse for OpenApiArgs {
                 "deprecated" => {
                     let _: syn::Token![=] = input.parse()?;
                     deprecated = Some(input.parse::<syn::LitBool>()?.value);
+                }
+                "external_docs" => {
+                    let content;
+                    syn::parenthesized!(content in input);
+                    while !content.is_empty() {
+                        let key: syn::Ident = content.parse()?;
+                        let _: syn::Token![=] = content.parse()?;
+                        match key.to_string().as_str() {
+                            "url" => external_docs_url = Some(content.parse::<syn::LitStr>()?.value()),
+                            "description" => external_docs_description = Some(content.parse::<syn::LitStr>()?.value()),
+                            _ => return Err(syn::Error::new(key.span(), format!("unknown external_docs field: {key}"))),
+                        }
+                        if content.peek(syn::Token![,]) {
+                            let _: syn::Token![,] = content.parse()?;
+                        }
+                    }
+                    if external_docs_url.is_none() {
+                        return Err(syn::Error::new(content.span(), "external_docs() requires a `url` field"));
+                    }
                 }
                 "response" => {
                     let content;
@@ -120,9 +143,10 @@ impl Parse for OpenApiArgs {
         Ok(Self {
             tag,
             summary,
-
             operation_id,
             deprecated,
+            external_docs_url,
+            external_docs_description,
             responses,
             description: description,
         })
@@ -326,6 +350,16 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
         .deprecated
         .map(|d| quote! { op.deprecated = Some(#d); });
 
+    let ext_docs_val = args.external_docs_url.as_ref().map(|url| {
+        let desc = args.external_docs_description.as_ref().map(|d| quote! { Some(#d.to_string()) }).unwrap_or_else(|| quote! { None });
+        quote! {
+            op.external_docs = Some(::axoas::openapi3_rs::ExternalDocumentation {
+                url: #url.to_string(),
+                description: #desc,
+            });
+        }
+    });
+
     let output = quote! {
         #input
 
@@ -333,7 +367,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
         #vis fn #doc_fn_name() -> (::axoas::openapi3_rs::Operation, ::axoas::openapi3_rs::Components) {
             let mut ctx = ::axoas::GenContext::default();
             let mut op = ::axoas::openapi3_rs::Operation::default();
-            #tag_val #summary_val #desc_val #opid_val #dep_val
+            #tag_val #summary_val #desc_val #opid_val #dep_val #ext_docs_val
             #(#input_calls)*
             let mut rm = ::axoas::indexmap::IndexMap::new();
             let mut responses = ::axoas::openapi3_rs::Responses::default();
@@ -342,7 +376,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
             responses.responses = rm;
             op.responses = responses;
 
-            for (name, schema) in ctx.schema.take_definitions(true) {
+            for (name, schema) in ctx.schema_gen.take_definitions(true) {
                 let schemas_map = ctx.components.schemas
                     .get_or_insert_with(::axoas::indexmap::IndexMap::new);
                 let oas_schema = ::axoas::openapi::definition_to_openapi_schema(&schema);
@@ -396,15 +430,22 @@ fn build_response_entries(responses: &[ResponseArg]) -> proc_macro2::TokenStream
 
 #[proc_macro]
 pub fn route(input: TokenStream) -> TokenStream {
-    let handler_str = input.to_string().trim().to_string();
-    let handler_ident = syn::parse_str::<syn::Ident>(&handler_str)
-        .unwrap_or_else(|_| panic!("route! requires a valid identifier, got: {handler_str}"));
-    let hash = fxhash::hash64(&handler_str);
+    // Accept paths like `my_mod::handler` in addition to simple identifiers.
+    let handler_path: syn::Path = syn::parse(input.clone())
+        .unwrap_or_else(|e| panic!("route! requires a valid path (e.g. `handler` or `mod::handler`), got: {input}: {e}"));
+
+    // Hash the last segment only, matching #[openapi]'s hashing of the fn name.
+    let last_seg = handler_path
+        .segments
+        .last()
+        .expect("route! path must have at least one segment");
+    let hash = fxhash::hash64(&last_seg.ident.to_string());
     let doc_fn_name = format_ident!("__axoas_doc_{hash:x}");
+
     quote! {
         {
             let (__axoas_op, __axoas_comp) = #doc_fn_name();
-            axoas::DocHandler::new_with_components(#handler_ident, __axoas_op, __axoas_comp)
+            axoas::DocHandler::new_with_components(#handler_path, __axoas_op, __axoas_comp)
         }
     }
     .into()

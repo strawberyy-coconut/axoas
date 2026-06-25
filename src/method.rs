@@ -28,6 +28,7 @@ pub struct DocMethodRouter<S = (), E = Infallible> {
     pub(crate) options: Option<Operation>,
     pub(crate) trace: Option<Operation>,
     pub(crate) connect: Option<Operation>,
+    pub(crate) query: Option<Operation>,
     /// Accumulated reusable components from all chained handlers.
     pub(crate) components: Components,
 }
@@ -46,6 +47,7 @@ impl<S, E> DocMethodRouter<S, E> {
             options: None,
             trace: None,
             connect: None,
+            query: None,
             components: Components::default(),
         }
     }
@@ -66,6 +68,7 @@ impl<S, E> DocMethodRouter<S, E> {
         path_item.head = self.head.clone();
         path_item.options = self.options.clone();
         path_item.trace = self.trace.clone();
+        path_item.query = self.query.clone();
         if let Some(op) = &self.connect {
             let map = path_item.additional_operations.get_or_insert_with(indexmap::IndexMap::new);
             map.insert("CONNECT".to_string(), op.clone());
@@ -88,6 +91,7 @@ impl<S, E> DocMethodRouter<S, E> {
         if other.options.is_some() { self.options = other.options; }
         if other.trace.is_some() { self.trace = other.trace; }
         if other.connect.is_some() { self.connect = other.connect; }
+        if other.query.is_some() { self.query = other.query; }
         merge_components(&mut self.components, other.components);
         self
     }
@@ -108,6 +112,7 @@ impl<S, E> DocMethodRouter<S, E> {
             options: self.options,
             trace: self.trace,
             connect: self.connect,
+            query: self.query,
             components: self.components,
         }
     }
@@ -129,9 +134,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, get: _, post, put, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        let Self { method_router, get: _, post, put, delete, patch, head, options, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.get(doc.handler), get: Some(doc.operation), post, put, delete, patch, head, options, trace, connect, components: comps }
+        Self { method_router: method_router.get(doc.handler), get: Some(doc.operation), post, put, delete, patch, head, options, trace, connect, query, components: comps }
     }
 
     /// Chain a `POST` handler.
@@ -140,9 +145,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, post: _, get, put, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        let Self { method_router, post: _, get, put, delete, patch, head, options, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.post(doc.handler), post: Some(doc.operation), get, put, delete, patch, head, options, trace, connect, components: comps }
+        Self { method_router: method_router.post(doc.handler), post: Some(doc.operation), get, put, delete, patch, head, options, trace, connect, query, components: comps }
     }
 
     /// Chain a `PUT` handler.
@@ -151,9 +156,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, put: _, get, post, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        let Self { method_router, put: _, get, post, delete, patch, head, options, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.put(doc.handler), put: Some(doc.operation), get, post, delete, patch, head, options, trace, connect, components: comps }
+        Self { method_router: method_router.put(doc.handler), put: Some(doc.operation), get, post, delete, patch, head, options, trace, connect, query, components: comps }
     }
 
     /// Chain a `DELETE` handler.
@@ -162,9 +167,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, delete: _, get, post, put, patch, head, options, trace, connect, components: mut comps } = self;
+        let Self { method_router, delete: _, get, post, put, patch, head, options, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.delete(doc.handler), delete: Some(doc.operation), get, post, put, patch, head, options, trace, connect, components: comps }
+        Self { method_router: method_router.delete(doc.handler), delete: Some(doc.operation), get, post, put, patch, head, options, trace, connect, query, components: comps }
     }
 
     /// Chain a `PATCH` handler.
@@ -173,9 +178,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, patch: _, get, post, put, delete, head, options, trace, connect, components: mut comps } = self;
+        let Self { method_router, patch: _, get, post, put, delete, head, options, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.patch(doc.handler), patch: Some(doc.operation), get, post, put, delete, head, options, trace, connect, components: comps }
+        Self { method_router: method_router.patch(doc.handler), patch: Some(doc.operation), get, post, put, delete, head, options, trace, connect, query, components: comps }
     }
 
     /// Chain a `HEAD` handler.
@@ -184,9 +189,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, head: _, get, post, put, delete, patch, options, trace, connect, components: mut comps } = self;
+        let Self { method_router, head: _, get, post, put, delete, patch, options, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.head(doc.handler), head: Some(doc.operation), get, post, put, delete, patch, options, trace, connect, components: comps }
+        Self { method_router: method_router.head(doc.handler), head: Some(doc.operation), get, post, put, delete, patch, options, trace, connect, query, components: comps }
     }
 
     /// Chain an `OPTIONS` handler.
@@ -195,9 +200,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, options: _, get, post, put, delete, patch, head, trace, connect, components: mut comps } = self;
+        let Self { method_router, options: _, get, post, put, delete, patch, head, trace, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.options(doc.handler), options: Some(doc.operation), get, post, put, delete, patch, head, trace, connect, components: comps }
+        Self { method_router: method_router.options(doc.handler), options: Some(doc.operation), get, post, put, delete, patch, head, trace, connect, query, components: comps }
     }
 
     /// Chain a `TRACE` handler.
@@ -206,9 +211,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, trace: _, get, post, put, delete, patch, head, options, connect, components: mut comps } = self;
+        let Self { method_router, trace: _, get, post, put, delete, patch, head, options, connect, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.trace(doc.handler), trace: Some(doc.operation), get, post, put, delete, patch, head, options, connect, components: comps }
+        Self { method_router: method_router.trace(doc.handler), trace: Some(doc.operation), get, post, put, delete, patch, head, options, connect, query, components: comps }
     }
 
     /// Chain a `CONNECT` handler.
@@ -217,9 +222,24 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        let Self { method_router, connect: _, get, post, put, delete, patch, head, options, trace, components: mut comps } = self;
+        let Self { method_router, connect: _, get, post, put, delete, patch, head, options, trace, query, components: mut comps } = self;
         merge_components(&mut comps, doc.components);
-        Self { method_router: method_router.connect(doc.handler), connect: Some(doc.operation), get, post, put, delete, patch, head, options, trace, components: comps }
+        Self { method_router: method_router.connect(doc.handler), connect: Some(doc.operation), get, post, put, delete, patch, head, options, trace, query, components: comps }
+    }
+
+    /// Chain a `QUERY` handler (OAS 3.2).
+    ///
+    /// Note: Axum 0.8 does not have native QUERY method routing.
+    /// This stores the operation for the OpenAPI spec; actual routing
+    /// requires a custom `axum::routing::on` or `MethodRouter` approach.
+    pub fn query<H, T>(self, doc: DocHandler<H>) -> Self
+    where
+        H: Handler<T, S>,
+        T: 'static,
+    {
+        let Self { method_router, query: _, get, post, put, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router, query: Some(doc.operation), get, post, put, delete, patch, head, options, trace, connect, components: comps }
     }
 
     /// Add a fallback handler.
@@ -247,6 +267,7 @@ where
             get: self.get, post: self.post, put: self.put,
             delete: self.delete, patch: self.patch, head: self.head,
             options: self.options, trace: self.trace, connect: self.connect,
+            query: self.query,
             components: self.components,
         }
     }

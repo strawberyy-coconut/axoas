@@ -11,7 +11,7 @@ use schemars::SchemaGenerator;
 /// schemas, responses, etc.) into the global `Components` map.
 #[derive(Debug)]
 pub struct GenContext {
-    pub schema: SchemaGenerator,
+    pub schema_gen: SchemaGenerator,
     pub components: Components,
     #[cfg(feature = "opinionated-errors")]
     pub infer_error_responses: bool,
@@ -20,7 +20,7 @@ pub struct GenContext {
 impl Default for GenContext {
     fn default() -> Self {
         Self {
-            schema:  SchemaGenerator::new(schemars::generate::SchemaSettings::openapi3()),
+            schema_gen: SchemaGenerator::new(schemars::generate::SchemaSettings::openapi3()),
             components: Components::default(),
             #[cfg(feature = "opinionated-errors")]
             infer_error_responses: true,
