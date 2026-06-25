@@ -17,6 +17,7 @@ struct OpenApiArgs {
     external_docs_url: Option<String>,
     external_docs_description: Option<String>,
     responses: Vec<ResponseArg>,
+    servers: Vec<ServerArg>,
 }
 
 struct ResponseArg {
@@ -24,6 +25,12 @@ struct ResponseArg {
     ty: Option<Type>,
     content_type: Option<String>,
     description: String,
+    summary: Option<String>,
+}
+
+struct ServerArg {
+    url: String,
+    description: Option<String>,
 }
 
 impl Parse for OpenApiArgs {
@@ -36,6 +43,7 @@ impl Parse for OpenApiArgs {
         let mut external_docs_url = None;
         let mut external_docs_description = None;
         let mut responses = Vec::new();
+        let mut servers = Vec::new();
         while !input.is_empty() {
             let key: syn::Ident = input.parse()?;
             match key.to_string().as_str() {
@@ -78,6 +86,28 @@ impl Parse for OpenApiArgs {
                         return Err(syn::Error::new(content.span(), "external_docs() requires a `url` field"));
                     }
                 }
+                "server" => {
+                    let content;
+                    syn::parenthesized!(content in input);
+                    let mut url = String::new();
+                    let mut server_desc = None;
+                    while !content.is_empty() {
+                        let skey: syn::Ident = content.parse()?;
+                        let _: syn::Token![=] = content.parse()?;
+                        match skey.to_string().as_str() {
+                            "url" => url = content.parse::<syn::LitStr>()?.value(),
+                            "description" => server_desc = Some(content.parse::<syn::LitStr>()?.value()),
+                            _ => return Err(syn::Error::new(skey.span(), format!("unknown server field: {skey}"))),
+                        }
+                        if content.peek(syn::Token![,]) {
+                            let _: syn::Token![,] = content.parse()?;
+                        }
+                    }
+                    if url.is_empty() {
+                        return Err(syn::Error::new(content.span(), "server() requires a `url` field"));
+                    }
+                    servers.push(ServerArg { url, description: server_desc });
+                }
                 "response" => {
                     let content;
                     syn::parenthesized!(content in input);
@@ -85,6 +115,7 @@ impl Parse for OpenApiArgs {
                     let mut ty = None;
                     let mut content_type = None;
                     let mut resp_desc = None;
+                    let mut resp_summary = None;
                     while !content.is_empty() {
                         // `type` is a Rust keyword, can't be parsed as Ident — peek for it
                         let key_str: String = if content.peek(syn::Token![type]) {
@@ -102,6 +133,9 @@ impl Parse for OpenApiArgs {
                             }
                             "description" => {
                                 resp_desc = Some(content.parse::<syn::LitStr>()?.value())
+                            }
+                            "summary" => {
+                                resp_summary = Some(content.parse::<syn::LitStr>()?.value())
                             }
                             _ => {
                                 return Err(syn::Error::new(
@@ -127,6 +161,7 @@ impl Parse for OpenApiArgs {
                         content_type,
                         description: resp_desc
                             .expect("description is required; already validated above"),
+                        summary: resp_summary,
                     });
                 }
                 _ => {
@@ -148,6 +183,7 @@ impl Parse for OpenApiArgs {
             external_docs_url,
             external_docs_description,
             responses,
+            servers,
             description: description,
         })
     }
@@ -173,6 +209,7 @@ fn classify_param(ty: &Type) -> &'static str {
     "custom"
 }
 
+#[allow(dead_code)]
 fn extract_inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(TypePath { path, .. }) = ty {
         if let Some(seg) = path.segments.last() {
@@ -360,6 +397,23 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
+    let servers_val = if !args.servers.is_empty() {
+        let server_exprs: Vec<_> = args.servers.iter().map(|s| {
+            let url = &s.url;
+            let desc = s.description.as_ref().map(|d| quote! { Some(#d.to_string()) }).unwrap_or_else(|| quote! { None });
+            quote! {
+                ::axoas::openapi3_rs::Server {
+                    url: #url.to_string(),
+                    description: #desc,
+                    ..Default::default()
+                }
+            }
+        }).collect();
+        Some(quote! { op.servers = Some(vec![#(#server_exprs),*]); })
+    } else {
+        None
+    };
+
     let output = quote! {
         #input
 
@@ -367,7 +421,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
         #vis fn #doc_fn_name() -> (::axoas::openapi3_rs::Operation, ::axoas::openapi3_rs::Components) {
             let mut ctx = ::axoas::GenContext::default();
             let mut op = ::axoas::openapi3_rs::Operation::default();
-            #tag_val #summary_val #desc_val #opid_val #dep_val #ext_docs_val
+            #tag_val #summary_val #desc_val #opid_val #dep_val #ext_docs_val #servers_val
             #(#input_calls)*
             let mut rm = ::axoas::indexmap::IndexMap::new();
             let mut responses = ::axoas::openapi3_rs::Responses::default();
@@ -394,31 +448,29 @@ fn build_response_entries(responses: &[ResponseArg]) -> proc_macro2::TokenStream
     let mut entries = Vec::new();
     for r in responses {
         let status = &r.status;
-
         let desc = &r.description;
+        let summary = r.summary.as_ref().map(|s| quote! { Some(#s.to_string()) }).unwrap_or_else(|| quote! { None });
         if let Some(ref_t) = &r.ty {
-            // response_schema already returns (String, RefOr<Response>) — no extra wrap
             entries.push(quote! {
                 rm.insert(#status.to_string(),
                     ::axoas::openapi::typed_response_schema::<#ref_t>(
-                        &mut ctx, #status, #desc
+                        &mut ctx, #status, #desc, #summary
                     ).1
                 );
             });
         } else if let Some(ct) = &r.content_type {
-            // binary_response already returns (String, RefOr<Response>) — no extra wrap
             let ct_s = ct.clone();
             entries.push(quote! {
                 rm.insert(#status.to_string(),
-                    ::axoas::openapi::binary_response(#status, #ct_s, #desc).1
+                    ::axoas::openapi::binary_response(#status, #ct_s, #desc, #summary).1
                 );
             });
         } else {
-            // Bare Response — needs RefOr::Item
             entries.push(quote! {
                 rm.insert(#status.to_string(), ::axoas::openapi3_rs::RefOr::Item(
                     ::axoas::openapi3_rs::Response {
                         description: #desc.to_string(),
+                        summary: #summary,
                         ..Default::default()
                     }
                 ));

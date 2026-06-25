@@ -35,12 +35,31 @@ define_routing_fn!(options);
 define_routing_fn!(trace);
 define_routing_fn!(connect);
 
-// Note: QUERY method support is available on DocMethodRouter (field `query`)
-// and PathItem, but axum 0.8 lacks native QUERY routing. Use
-// `axum::routing::on(MethodFilter::..., handler)` with a custom filter
-// if needed, and set `query` on DocMethodRouter manually.
+/// Route `QUERY` requests to the given documented handler (OAS 3.2).
+///
+/// **Important:** Axum 0.8 does not support the QUERY HTTP method natively.
+/// This function stores the operation on `PathItem.query` for the OpenAPI
+/// spec, but routes via axum's fallback. For proper QUERY routing, use a
+/// custom `axum::routing::on` with a `MethodRouter` that handles QUERY directly,
+/// and construct the `DocMethodRouter` manually with `DocMethodRouter::new()`.
+pub fn query<H, T, S>(doc: DocHandler<H>) -> DocMethodRouter<S, Infallible>
+where
+    H: Handler<T, S>,
+    T: 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    let DocHandler { handler, operation, components } = doc;
+    let mut dmr = DocMethodRouter::new(axum::routing::any(handler));
+    dmr.query = Some(operation);
+    dmr.components = components;
+    dmr
+}
 
-/// Route all HTTP methods to the given handler (uses fallback).
+/// Route all HTTP methods to the given handler (uses axum fallback).
+///
+/// Note: This registers different method slots with the same operation clone.
+/// Prefer using specific routing functions (`get`, `post`, etc.) with
+/// individual handlers for accurate per-method OpenAPI documentation.
 pub fn any<H, T, S>(doc: DocHandler<H>) -> DocMethodRouter<S, Infallible>
 where
     H: Handler<T, S>,
@@ -59,7 +78,11 @@ where
         options: Some(operation.clone()),
         trace: Some(operation.clone()),
         connect: Some(operation.clone()),
-        query: Some(operation.clone()),
+        query: Some(operation),
         components,
+        path_summary: None,
+        path_description: None,
+        path_servers: None,
+        path_parameters: None,
     }
 }

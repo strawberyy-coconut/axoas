@@ -374,10 +374,10 @@ fn parameters_from_schema_inner(
                         .map(String::from);
                     let prop_required =
                         location == ParameterIn::Path || required_set.contains(name);
-                    let style = match location {
-                        ParameterIn::Path | ParameterIn::Header => Some(Style::Simple),
-                        ParameterIn::Query | ParameterIn::Cookie => Some(Style::Form),
-                        _ => None,
+                    let (style, explode) = match location {
+                        ParameterIn::Path | ParameterIn::Header => (Some(Style::Simple), Some(false)),
+                        ParameterIn::Query | ParameterIn::Cookie => (Some(Style::Form), Some(true)),
+                        _ => (None, None),
                     };
                     let schema_data = if let serde_json::Value::Object(map) = prop_schema.clone() {
                         map
@@ -390,6 +390,9 @@ fn parameters_from_schema_inner(
                         description,
                         required: Some(prop_required),
                         style,
+                        explode,
+                        allow_reserved: Some(false),
+                        deprecated: None,
                         schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
                             schema_data,
                             ..Default::default()
@@ -404,10 +407,10 @@ fn parameters_from_schema_inner(
 
     // If no properties found (scalar type like u64, String), create single param
     if !has_properties {
-        let style = match location {
-            ParameterIn::Path | ParameterIn::Header => Some(Style::Simple),
-            ParameterIn::Query | ParameterIn::Cookie => Some(Style::Form),
-            _ => None,
+        let (style, explode) = match location {
+            ParameterIn::Path | ParameterIn::Header => (Some(Style::Simple), Some(false)),
+            ParameterIn::Query | ParameterIn::Cookie => (Some(Style::Form), Some(true)),
+            _ => (None, None),
         };
         params.push(Parameter {
             name: default_name.to_string(),
@@ -415,6 +418,9 @@ fn parameters_from_schema_inner(
             description: None,
             required: Some(location == ParameterIn::Path),
             style,
+            explode,
+            allow_reserved: Some(false),
+            deprecated: None,
             schema: Some(RefOr::Item(schema.clone())),
             ..Default::default()
         });

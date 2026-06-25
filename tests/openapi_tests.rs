@@ -224,7 +224,7 @@ fn schema_roundtrip_is_stable() {
 
 #[test]
 fn binary_response_pdf() {
-    let (status, ref_or) = binary_response("200", "application/pdf", "PDF document");
+    let (status, ref_or) = binary_response("200", "application/pdf", "PDF document", None);
     assert_eq!(status, "200");
     match &ref_or {
         openapi3_rs::RefOr::Item(response) => {
@@ -242,7 +242,7 @@ fn binary_response_pdf() {
 
 #[test]
 fn binary_response_octet_stream() {
-    let (status, _) = binary_response("200", "application/octet-stream", "Download");
+    let (status, _) = binary_response("200", "application/octet-stream", "Download", None);
     assert_eq!(status, "200");
 }
 
@@ -274,7 +274,7 @@ fn request_body_not_required() {
 #[test]
 fn response_schema_200() {
     let s = schema_for!(SimpleStruct);
-    let (status, ref_or) = response_schema(&s, "200", "Success");
+    let (status, ref_or) = response_schema(&s, "200", "Success", None);
     assert_eq!(status, "200");
     match &ref_or {
         openapi3_rs::RefOr::Item(response) => {
@@ -289,6 +289,6 @@ fn response_schema_200() {
 #[test]
 fn response_schema_custom_status() {
     let s = schema_for!(SimpleStruct);
-    let (status, _) = response_schema(&s, "201", "Created");
+    let (status, _) = response_schema(&s, "201", "Created", None);
     assert_eq!(status, "201");
 }

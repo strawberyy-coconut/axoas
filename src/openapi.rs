@@ -15,20 +15,37 @@ pub fn definition_to_openapi_schema(value: &serde_json::Value) -> Schema {
 }
 
 /// Generate a binary download response.
-pub fn binary_response(status: &str, content_type: &str, description: &str) -> (String, RefOr<Response>) {
+pub fn binary_response(
+    status: &str,
+    content_type: &str,
+    description: &str,
+    summary: Option<&str>,
+) -> (String, RefOr<Response>) {
     let mut content = IndexMap::new();
-    content.insert(content_type.to_string(), RefOr::Item(MediaType { schema: None, ..Default::default() }));
-    (status.to_string(), RefOr::Item(Response {
-        description: description.to_string(), content: Some(content), ..Default::default()
-    }))
+    content.insert(
+        content_type.to_string(),
+        RefOr::Item(MediaType { schema: None, ..Default::default() }),
+    );
+    (
+        status.to_string(),
+        RefOr::Item(Response {
+            description: description.to_string(),
+            summary: summary.map(String::from),
+            content: Some(content),
+            ..Default::default()
+        }),
+    )
 }
 
 /// Generate a JSON response for type T using the GenContext's schema generator.
 pub fn typed_response_schema<T: schemars::JsonSchema>(
-    ctx: &mut crate::GenContext, status: &str, description: &str
+    ctx: &mut crate::GenContext,
+    status: &str,
+    description: &str,
+    summary: Option<&str>,
 ) -> (String, RefOr<Response>) {
     let schema = ctx.schema_gen.subschema_for::<T>();
-    response_schema(&schema, status, description)
+    response_schema(&schema, status, description, summary)
 }
 
 /// Generate a JSON request body from a schemars schema.
@@ -42,13 +59,28 @@ pub fn request_body_schema(schema: &schemars::Schema, description: Option<&str>,
 }
 
 /// Generate a JSON response from a schemars schema.
-pub fn response_schema(schema: &schemars::Schema, status: &str, description: &str) -> (String, RefOr<Response>) {
+pub fn response_schema(
+    schema: &schemars::Schema,
+    status: &str,
+    description: &str,
+    summary: Option<&str>,
+) -> (String, RefOr<Response>) {
     let openapi_schema = to_openapi_schema(schema);
     let mut content = IndexMap::new();
-    content.insert("application/json".to_string(), RefOr::Item(MediaType {
-        schema: Some(RefOr::Item(openapi_schema)), ..Default::default()
-    }));
-    (status.to_string(), RefOr::Item(Response {
-        description: description.to_string(), content: Some(content), ..Default::default()
-    }))
+    content.insert(
+        "application/json".to_string(),
+        RefOr::Item(MediaType {
+            schema: Some(RefOr::Item(openapi_schema)),
+            ..Default::default()
+        }),
+    );
+    (
+        status.to_string(),
+        RefOr::Item(Response {
+            description: description.to_string(),
+            summary: summary.map(String::from),
+            content: Some(content),
+            ..Default::default()
+        }),
+    )
 }
