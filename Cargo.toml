@@ -27,6 +27,7 @@ multipart = ["dep:axum-typed-multipart"]
 swagger = []
 redoc = []
 scalar = []
+opinionated-errors = []
 
 [workspace]
 members = ["axoas-macros", "examples/*"]

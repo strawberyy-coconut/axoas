@@ -13,6 +13,7 @@ use schemars::SchemaGenerator;
 pub struct GenContext {
     pub schema: SchemaGenerator,
     pub components: Components,
+    #[cfg(feature = "opinionated-errors")]
     pub infer_error_responses: bool,
 }
 
@@ -21,6 +22,7 @@ impl Default for GenContext {
         Self {
             schema:  SchemaGenerator::new(schemars::generate::SchemaSettings::openapi3()),
             components: Components::default(),
+            #[cfg(feature = "opinionated-errors")]
             infer_error_responses: true,
         }
     }

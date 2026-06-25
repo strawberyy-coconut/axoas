@@ -84,6 +84,7 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Json<T> {
         }));
     }
 
+    #[cfg(feature = "opinionated-errors")]
     fn inferred_early_responses(_: &mut GenContext, _: &mut Operation) -> Vec<(Option<String>, Response)> {
         vec![
             (Some("400".into()), Response { description: "Bad Request — invalid JSON".into(), ..Default::default() }),
