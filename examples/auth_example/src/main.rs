@@ -55,7 +55,7 @@ impl axoas::OpenApiExtractor for BearerAuth {
             .entry("bearerAuth".to_string())
             .or_insert_with(|| {
                 axoas::openapi3_rs::RefOr::Item(axoas::openapi3_rs::SecurityScheme {
-                    scheme_type: "http".to_string(),
+                    scheme_type: axoas::openapi3_rs::SecuritySchemeType::Http,
                     scheme: Some("bearer".to_string()),
                     bearer_format: Some("JWT".to_string()),
                     description: Some(
@@ -131,9 +131,9 @@ impl axoas::OpenApiExtractor for ApiKeyAuth {
             .entry("apiKey".to_string())
             .or_insert_with(|| {
                 axoas::openapi3_rs::RefOr::Item(axoas::openapi3_rs::SecurityScheme {
-                    scheme_type: "apiKey".to_string(),
+                    scheme_type: axoas::openapi3_rs::SecuritySchemeType::ApiKey,
                     name: Some("X-API-Key".to_string()),
-                    location: Some("header".to_string()),
+                    location: Some(axoas::openapi3_rs::ApiKeyLocation::Header),
                     description: Some(
                         "API key passed in the X-API-Key header".to_string(),
                     ),
@@ -279,6 +279,7 @@ async fn main() {
             terms_of_service: None,
             contact: None,
             license: None,
+            ..Default::default()
         })
         .into_axum_router();
 

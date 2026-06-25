@@ -56,15 +56,16 @@ impl OpenApiExtractor for axum::body::Bytes {
         let mut content = IndexMap::new();
         content.insert(
             "application/octet-stream".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: None,
                 ..Default::default()
-            },
+            }),
         );
         operation.request_body = Some(RefOr::Item(RequestBody {
             description: Some("Raw binary body".into()),
             content,
             required: Some(true),
+            ..Default::default()
         }));
     }
 }
@@ -77,7 +78,7 @@ impl OpenApiExtractor for axum::extract::RawQuery {
         let mut content = IndexMap::new();
         content.insert(
             "text/plain".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
                     schema_data: {
                         let mut m = serde_json::Map::new();
@@ -87,7 +88,7 @@ impl OpenApiExtractor for axum::extract::RawQuery {
                     ..Default::default()
                 }))),
                 ..Default::default()
-            },
+            }),
         );
         operation.parameters.get_or_insert_with(Vec::new).push(RefOr::Item(Parameter {
             name: "query".into(),
@@ -138,15 +139,16 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Json<T> {
         let mut content = IndexMap::new();
         content.insert(
             "application/json".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(openapi_schema)),
                 ..Default::default()
-            },
+            }),
         );
         operation.request_body = Some(RefOr::Item(RequestBody {
             description: None,
             content,
             required: Some(true),
+            ..Default::default()
         }));
     }
 
@@ -190,15 +192,16 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Form<T> {
         let mut content = IndexMap::new();
         content.insert(
             "application/x-www-form-urlencoded".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(openapi_schema)),
                 ..Default::default()
-            },
+            }),
         );
         operation.request_body = Some(RefOr::Item(RequestBody {
             description: None,
             content,
             required: Some(true),
+            ..Default::default()
         }));
     }
 }
@@ -213,10 +216,10 @@ impl<T: JsonSchema> OpenApiOutput for axum::Json<T> {
         let mut content = IndexMap::new();
         content.insert(
             "application/json".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(openapi_schema)),
                 ..Default::default()
-            },
+            }),
         );
         Some(Response {
             description: "Successful response".to_string(),
@@ -244,10 +247,10 @@ impl<T: JsonSchema> OpenApiOutput for (axum::http::StatusCode, axum::Json<T>) {
         let mut content = IndexMap::new();
         content.insert(
             "application/json".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(openapi_schema)),
                 ..Default::default()
-            },
+            }),
         );
         Some(Response {
             description: "Successful response".to_string(),
@@ -265,7 +268,7 @@ impl OpenApiOutput for String {
         let mut content = IndexMap::new();
         content.insert(
             "text/plain".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
                     schema_data: {
                         let mut m = serde_json::Map::new();
@@ -275,7 +278,7 @@ impl OpenApiOutput for String {
                     ..Default::default()
                 }))),
                 ..Default::default()
-            },
+            }),
         );
         Some(Response {
             description: "Successful response".to_string(),
@@ -293,10 +296,10 @@ impl OpenApiOutput for axum::body::Bytes {
         let mut content = IndexMap::new();
         content.insert(
             "application/octet-stream".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: None,
                 ..Default::default()
-            },
+            }),
         );
         Some(Response {
             description: "Binary response".to_string(),
@@ -314,7 +317,7 @@ impl<T: Send> OpenApiOutput for axum::response::Html<T> {
         let mut content = IndexMap::new();
         content.insert(
             "text/html".to_string(),
-            MediaType {
+            RefOr::Item(MediaType {
                 schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
                     schema_data: {
                         let mut m = serde_json::Map::new();
@@ -324,7 +327,7 @@ impl<T: Send> OpenApiOutput for axum::response::Html<T> {
                     ..Default::default()
                 }))),
                 ..Default::default()
-            },
+            }),
         );
         Some(Response {
             description: "HTML response".to_string(),

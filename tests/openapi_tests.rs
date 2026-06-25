@@ -230,7 +230,10 @@ fn binary_response_pdf() {
         openapi3_rs::RefOr::Item(response) => {
             assert_eq!(response.description, "PDF document");
             let content = response.content.as_ref().expect("should have content");
-            let media = content.get("application/pdf").expect("should have pdf media type");
+            let media = match content.get("application/pdf").expect("should have pdf media type") {
+                openapi3_rs::RefOr::Item(m) => m,
+                _ => panic!("expected RefOr::Item"),
+            };
             assert!(media.schema.is_none(), "binary response should have no schema");
         }
         _ => panic!("expected RefOr::Item"),
@@ -251,7 +254,10 @@ fn request_body_required() {
     let body = request_body_schema(&s, Some("test body"), true);
     assert_eq!(body.description.as_deref(), Some("test body"));
     assert_eq!(body.required, Some(true));
-    let content = body.content.get("application/json").expect("should have json content");
+    let content = match body.content.get("application/json").expect("should have json content") {
+        openapi3_rs::RefOr::Item(m) => m,
+        _ => panic!("expected RefOr::Item"),
+    };
     assert!(content.schema.is_some(), "should have schema");
 }
 

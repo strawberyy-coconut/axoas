@@ -17,7 +17,7 @@ pub fn definition_to_openapi_schema(value: &serde_json::Value) -> Schema {
 /// Generate a binary download response.
 pub fn binary_response(status: &str, content_type: &str, description: &str) -> (String, RefOr<Response>) {
     let mut content = IndexMap::new();
-    content.insert(content_type.to_string(), MediaType { schema: None, ..Default::default() });
+    content.insert(content_type.to_string(), RefOr::Item(MediaType { schema: None, ..Default::default() }));
     (status.to_string(), RefOr::Item(Response {
         description: description.to_string(), content: Some(content), ..Default::default()
     }))
@@ -35,19 +35,19 @@ pub fn typed_response_schema<T: schemars::JsonSchema>(
 pub fn request_body_schema(schema: &schemars::Schema, description: Option<&str>, required: bool) -> RequestBody {
     let openapi_schema = to_openapi_schema(schema);
     let mut content = IndexMap::new();
-    content.insert("application/json".to_string(), MediaType {
+    content.insert("application/json".to_string(), RefOr::Item(MediaType {
         schema: Some(RefOr::Item(openapi_schema)), ..Default::default()
-    });
-    RequestBody { description: description.map(String::from), content, required: Some(required) }
+    }));
+    RequestBody { description: description.map(String::from), content, required: Some(required), ..Default::default() }
 }
 
 /// Generate a JSON response from a schemars schema.
 pub fn response_schema(schema: &schemars::Schema, status: &str, description: &str) -> (String, RefOr<Response>) {
     let openapi_schema = to_openapi_schema(schema);
     let mut content = IndexMap::new();
-    content.insert("application/json".to_string(), MediaType {
+    content.insert("application/json".to_string(), RefOr::Item(MediaType {
         schema: Some(RefOr::Item(openapi_schema)), ..Default::default()
-    });
+    }));
     (status.to_string(), RefOr::Item(Response {
         description: description.to_string(), content: Some(content), ..Default::default()
     }))

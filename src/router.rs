@@ -61,6 +61,7 @@ where
                     terms_of_service: None,
                     contact: None,
                     license: None,
+                    ..Default::default()
                 },
                 servers: Vec::new(),
                 tags: Vec::new(),
@@ -218,6 +219,7 @@ where
         inner.external_docs = Some(ExternalDocumentation {
             url: url.to_string(),
             description: description.map(String::from),
+            ..Default::default()
         });
         self
     }

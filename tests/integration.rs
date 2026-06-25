@@ -90,6 +90,7 @@ fn with_info() {
     let info = openapi3_rs::Info {
         title: "Test".into(), version: "1.0".into(),
         summary: None, description: None, terms_of_service: None, contact: None, license: None,
+        ..Default::default()
     };
     let r: DR = DocRouter::new().with_info(info);
     assert_eq!(r.openapi_doc().info.title, "Test");
