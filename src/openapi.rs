@@ -23,6 +23,14 @@ pub fn binary_response(status: &str, content_type: &str, description: &str) -> (
     }))
 }
 
+/// Generate a JSON response for type T using the GenContext's schema generator.
+pub fn typed_response_schema<T: schemars::JsonSchema>(
+    ctx: &mut crate::GenContext, status: &str, description: &str
+) -> (String, RefOr<Response>) {
+    let schema = ctx.schema.subschema_for::<T>();
+    response_schema(&schema, status, description)
+}
+
 /// Generate a JSON request body from a schemars schema.
 pub fn request_body_schema(schema: &schemars::Schema, description: Option<&str>, required: bool) -> RequestBody {
     let openapi_schema = to_openapi_schema(schema);

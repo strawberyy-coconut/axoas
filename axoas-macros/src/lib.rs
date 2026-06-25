@@ -359,8 +359,8 @@ fn build_response_entries(responses: &[ResponseArg]) -> proc_macro2::TokenStream
             // response_schema already returns (String, RefOr<Response>) — no extra wrap
             entries.push(quote! {
                 rm.insert(#status.to_string(),
-                    ::axoas::openapi::response_schema(
-                        &::axoas::schemars::schema_for!(#ref_t), #status, #desc
+                    ::axoas::openapi::typed_response_schema::<#ref_t>(
+                        &mut ctx, #status, #desc
                     ).1
                 );
             });

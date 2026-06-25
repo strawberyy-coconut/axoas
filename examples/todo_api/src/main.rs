@@ -85,6 +85,7 @@ async fn list_todos(State(state): State<AppState>) -> axum::Json<Vec<Todo>> {
     description = "Creates a todo and returns it with an assigned ID",
     response(status = "201", type = Todo, description = "Todo created"),
     response(status = "400", type = ErrorResponse, description = "Invalid title")
+
 )]
 async fn create_todo(
     State(state): State<AppState>,
