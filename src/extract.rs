@@ -142,7 +142,7 @@ impl<T: JsonSchema> OpenApiOutput for (axum::http::StatusCode, axum::Json<T>) {
             schema: Some(RefOr::Item(openapi_schema)),
             ..Default::default()
         });
-        Some(Response { description: String::new(), content: Some(content), ..Default::default() })
+        Some(Response { description: "Successful response".to_string(), content: Some(content), ..Default::default() })
     }
 }
 

@@ -21,7 +21,7 @@ struct ResponseArg {
     status: String,
     ty: Option<Type>,
     content_type: Option<String>,
-    description: Option<String>,
+    description: String,
 }
 
 impl Parse for OpenApiArgs {
@@ -91,11 +91,19 @@ impl Parse for OpenApiArgs {
                             let _: syn::Token![,] = content.parse()?;
                         }
                     }
+                    // At the end of the "response" => { ... } block, before .push():
+                    if resp_desc.is_none() {
+                        return Err(syn::Error::new(
+                            content.span(),
+                            "response() requires a `description` field",
+                        ));
+                    }
                     responses.push(ResponseArg {
                         status,
                         ty,
                         content_type,
-                        description: resp_desc,
+                        description: resp_desc
+                            .expect("description is required; already validated above"),
                     });
                 }
                 _ => {
@@ -112,10 +120,11 @@ impl Parse for OpenApiArgs {
         Ok(Self {
             tag,
             summary,
-            description,
+
             operation_id,
             deprecated,
             responses,
+            description: description,
         })
     }
 }
@@ -351,10 +360,8 @@ fn build_response_entries(responses: &[ResponseArg]) -> proc_macro2::TokenStream
     let mut entries = Vec::new();
     for r in responses {
         let status = &r.status;
-        let desc = r
-            .description
-            .clone()
-            .unwrap_or_else(|| "Response".to_string());
+
+        let desc = &r.description;
         if let Some(ref_t) = &r.ty {
             // response_schema already returns (String, RefOr<Response>) — no extra wrap
             entries.push(quote! {
