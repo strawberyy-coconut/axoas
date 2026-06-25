@@ -172,6 +172,12 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 "custom" => {
                     input_calls.push(quote! { <#ty as ::axoas::OpenApiExtractor>::operation_input(&mut ctx, &mut op); });
+                    early_calls.push(quote! {
+                        for (code, resp) in <#ty as ::axoas::OpenApiExtractor>::inferred_early_responses(&mut ctx, &mut op) {
+                            if let Some(c) = code { rm.insert(c.to_string(), ::axoas::openapi3_rs::RefOr::Item(resp)); }
+                            else { responses.default = Some(::axoas::openapi3_rs::RefOr::Item(resp)); }
+                        }
+                    });
                 }
                 _ => {}
             }
@@ -244,7 +250,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
         #input
 
         #[doc(hidden)] #[allow(non_snake_case)]
-        #vis fn #doc_fn_name() -> ::axoas::openapi3_rs::Operation {
+        #vis fn #doc_fn_name() -> (::axoas::openapi3_rs::Operation, ::axoas::openapi3_rs::Components) {
             let mut ctx = ::axoas::GenContext::default();
             let mut op = ::axoas::openapi3_rs::Operation::default();
             #tag_val #summary_val #desc_val #opid_val #dep_val
@@ -255,7 +261,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
             #(#early_calls)*
             responses.responses = rm;
             op.responses = responses;
-            op
+            (op, ctx.components)
         }
     };
     output.into()
@@ -268,5 +274,10 @@ pub fn route(input: TokenStream) -> TokenStream {
         .unwrap_or_else(|_| panic!("route! requires a valid identifier, got: {handler_str}"));
     let hash = fxhash::hash64(&handler_str);
     let doc_fn_name = format_ident!("__axoas_doc_{hash:x}");
-    quote! { axoas::DocHandler::new(#handler_ident, #doc_fn_name()) }.into()
+    quote! {
+        {
+            let (__axoas_op, __axoas_comp) = #doc_fn_name();
+            axoas::DocHandler::new_with_components(#handler_ident, __axoas_op, __axoas_comp)
+        }
+    }.into()
 }

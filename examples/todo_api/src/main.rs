@@ -180,8 +180,9 @@ async fn main() {
     let health_router = DocRouter::new()
         .route("/health", axoas::routing::get(route!(health_check)));
 
-    // Merge and nest under /api
-    let api_router = health_router.merge(todos_router);
+    // Merge sub-routers
+    let api_router = health_router
+        .merge(todos_router);
 
     // Build the full app with customized metadata
     let app = DocRouter::new()

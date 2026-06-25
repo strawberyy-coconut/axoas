@@ -16,9 +16,10 @@ macro_rules! define_routing_fn {
             T: 'static,
             S: Clone + Send + Sync + 'static,
         {
-            let op = doc.operation;
-            let mut dmr = DocMethodRouter::new(axum::routing::$name(doc.handler));
-            dmr.$name = Some(op);
+            let DocHandler { handler, operation, components } = doc;
+            let mut dmr = DocMethodRouter::new(axum::routing::$name(handler));
+            dmr.$name = Some(operation);
+            dmr.components = components;
             dmr
         }
     };
@@ -41,17 +42,18 @@ where
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
-    let op = doc.operation;
+    let DocHandler { handler, operation, components } = doc;
     DocMethodRouter {
-        method_router: axum::routing::any(doc.handler),
-        get: Some(op.clone()),
-        post: Some(op.clone()),
-        put: Some(op.clone()),
-        delete: Some(op.clone()),
-        patch: Some(op.clone()),
-        head: Some(op.clone()),
-        options: Some(op.clone()),
-        trace: Some(op.clone()),
-        connect: Some(op.clone()),
+        method_router: axum::routing::any(handler),
+        get: Some(operation.clone()),
+        post: Some(operation.clone()),
+        put: Some(operation.clone()),
+        delete: Some(operation.clone()),
+        patch: Some(operation.clone()),
+        head: Some(operation.clone()),
+        options: Some(operation.clone()),
+        trace: Some(operation.clone()),
+        connect: Some(operation.clone()),
+        components,
     }
 }

@@ -10,12 +10,13 @@ use axum::response::IntoResponse;
 use axum::routing::Route;
 use indexmap::IndexMap;
 use openapi3_rs::{
-    Components, Info, OpenAPI, Operation, PathItem, RefOr, Server, Tag,
+    Components, Info, OpenAPI, Operation, PathItem, RefOr, SecurityRequirement, SecurityScheme,
+    Server, Tag,
 };
 use tower_layer::Layer;
 use tower_service::Service;
 
-use crate::method::DocMethodRouter;
+use crate::method::{self, DocMethodRouter};
 
 #[derive(Debug, Clone)]
 struct DocRouterInner<S> {
@@ -25,6 +26,8 @@ struct DocRouterInner<S> {
     servers: Vec<Server>,
     tags: Vec<Tag>,
     components: Components,
+    /// Global default security requirements applied to all operations.
+    security: Option<Vec<SecurityRequirement>>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +57,7 @@ where
                 servers: Vec::new(),
                 tags: Vec::new(),
                 components: Components::default(),
+                security: None,
             }),
         }
     }
@@ -64,7 +68,9 @@ where
         doc_method: DocMethodRouter<S, Infallible>,
     ) -> Self {
         let inner = Arc::make_mut(&mut self.inner);
-        let (method_router, path_item) = doc_method.split();
+        let (method_router, path_item, method_components) = doc_method.split();
+
+        method::merge_components(&mut inner.components, method_components);
 
         if let Some(existing) = inner.paths.get_mut(path) {
             if let RefOr::Item(existing_item) = existing {
@@ -81,6 +87,8 @@ where
     pub fn nest(mut self, prefix: &str, nested: DocRouter<S>) -> Self {
         let inner = Arc::make_mut(&mut self.inner);
         let nested_paths = nested.inner.paths.clone();
+
+        method::merge_components(&mut inner.components, nested.inner.components.clone());
 
         for (nested_path, path_item) in nested_paths {
             let combined = format_nested_path(prefix, &nested_path);
@@ -112,6 +120,8 @@ where
             }
         }
 
+        method::merge_components(&mut inner.components, other.inner.components.clone());
+
         inner.router = std::mem::take(&mut inner.router).merge(other.inner.router.clone());
         self
     }
@@ -128,6 +138,7 @@ where
                 servers: self.inner.servers.clone(),
                 tags: self.inner.tags.clone(),
                 components: self.inner.components.clone(),
+                security: self.inner.security.clone(),
             }),
         }
     }
@@ -173,6 +184,49 @@ where
         self
     }
 
+    /// Register a reusable security scheme in `components.security_schemes`.
+    ///
+    /// This defines what a named security scheme (e.g., `"bearerAuth"`) means.
+    /// Custom extractors can also auto-register schemes via `GenContext`,
+    /// but router-level registrations always take precedence (first-write-wins).
+    ///
+    /// ```ignore
+    /// DocRouter::new()
+    ///     .with_security_scheme("bearerAuth", SecurityScheme {
+    ///         scheme_type: "http".into(),
+    ///         scheme: Some("bearer".into()),
+    ///         bearer_format: Some("JWT".into()),
+    ///         ..Default::default()
+    ///     })
+    /// ```
+    pub fn with_security_scheme(mut self, name: &str, scheme: SecurityScheme) -> Self {
+        let inner = Arc::make_mut(&mut self.inner);
+        inner.components
+            .security_schemes
+            .get_or_insert_with(IndexMap::new)
+            .insert(name.to_string(), RefOr::Item(scheme));
+        self
+    }
+
+    /// Add a global default security requirement.
+    ///
+    /// This sets `OpenAPI.security` — a declaration of which security
+    /// mechanisms can be used across the API. Individual operations can
+    /// override this with their own `Operation.security` (set by extractors
+    /// or `.with()`).
+    ///
+    /// ```ignore
+    /// DocRouter::new()
+    ///     .with_security_requirement("bearerAuth")
+    /// ```
+    pub fn with_security_requirement(mut self, name: &str) -> Self {
+        let inner = Arc::make_mut(&mut self.inner);
+        let mut req = IndexMap::new();
+        req.insert(name.to_string(), Vec::new());
+        inner.security.get_or_insert_with(Vec::new).push(req);
+        self
+    }
+
     pub fn serve_openapi(self, path: &str) -> Self {
         let openapi_doc = self.openapi_doc();
         let json = serde_json::to_string(&openapi_doc).unwrap_or_default();
@@ -208,6 +262,7 @@ where
             },
             paths: Some(self.inner.paths.clone()),
             components: Some(self.inner.components.clone()),
+            security: self.inner.security.clone(),
             tags: if self.inner.tags.is_empty() {
                 None
             } else {

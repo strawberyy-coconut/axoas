@@ -7,7 +7,7 @@ use axum::extract::Request as AxumRequest;
 use axum::handler::Handler;
 use axum::routing::{MethodRouter, Route};
 use axum::{body::Body, response::IntoResponse};
-use openapi3_rs::Operation;
+use openapi3_rs::{Components, Operation};
 use tower_layer::Layer;
 use tower_service::Service;
 
@@ -28,6 +28,8 @@ pub struct DocMethodRouter<S = (), E = Infallible> {
     pub(crate) options: Option<Operation>,
     pub(crate) trace: Option<Operation>,
     pub(crate) connect: Option<Operation>,
+    /// Accumulated reusable components from all chained handlers.
+    pub(crate) components: Components,
 }
 
 impl<S, E> DocMethodRouter<S, E> {
@@ -44,13 +46,14 @@ impl<S, E> DocMethodRouter<S, E> {
             options: None,
             trace: None,
             connect: None,
+            components: Components::default(),
         }
     }
 
-    /// Split into the inner MethodRouter and the accumulated PathItem.
-    pub fn split(self) -> (MethodRouter<S, E>, openapi3_rs::PathItem) {
+    /// Split into the inner MethodRouter, accumulated PathItem, and Components.
+    pub fn split(self) -> (MethodRouter<S, E>, openapi3_rs::PathItem, Components) {
         let path_item = self.build_path_item();
-        (self.method_router, path_item)
+        (self.method_router, path_item, self.components)
     }
 
     fn build_path_item(&self) -> openapi3_rs::PathItem {
@@ -85,6 +88,7 @@ impl<S, E> DocMethodRouter<S, E> {
         if other.options.is_some() { self.options = other.options; }
         if other.trace.is_some() { self.trace = other.trace; }
         if other.connect.is_some() { self.connect = other.connect; }
+        merge_components(&mut self.components, other.components);
         self
     }
 
@@ -104,6 +108,7 @@ impl<S, E> DocMethodRouter<S, E> {
             options: self.options,
             trace: self.trace,
             connect: self.connect,
+            components: self.components,
         }
     }
 }
@@ -124,7 +129,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.get(doc.handler), get: Some(doc.operation), ..self }
+        let Self { method_router, get: _, post, put, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.get(doc.handler), get: Some(doc.operation), post, put, delete, patch, head, options, trace, connect, components: comps }
     }
 
     /// Chain a `POST` handler.
@@ -133,7 +140,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.post(doc.handler), post: Some(doc.operation), ..self }
+        let Self { method_router, post: _, get, put, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.post(doc.handler), post: Some(doc.operation), get, put, delete, patch, head, options, trace, connect, components: comps }
     }
 
     /// Chain a `PUT` handler.
@@ -142,7 +151,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.put(doc.handler), put: Some(doc.operation), ..self }
+        let Self { method_router, put: _, get, post, delete, patch, head, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.put(doc.handler), put: Some(doc.operation), get, post, delete, patch, head, options, trace, connect, components: comps }
     }
 
     /// Chain a `DELETE` handler.
@@ -151,7 +162,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.delete(doc.handler), delete: Some(doc.operation), ..self }
+        let Self { method_router, delete: _, get, post, put, patch, head, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.delete(doc.handler), delete: Some(doc.operation), get, post, put, patch, head, options, trace, connect, components: comps }
     }
 
     /// Chain a `PATCH` handler.
@@ -160,7 +173,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.patch(doc.handler), patch: Some(doc.operation), ..self }
+        let Self { method_router, patch: _, get, post, put, delete, head, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.patch(doc.handler), patch: Some(doc.operation), get, post, put, delete, head, options, trace, connect, components: comps }
     }
 
     /// Chain a `HEAD` handler.
@@ -169,7 +184,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.head(doc.handler), head: Some(doc.operation), ..self }
+        let Self { method_router, head: _, get, post, put, delete, patch, options, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.head(doc.handler), head: Some(doc.operation), get, post, put, delete, patch, options, trace, connect, components: comps }
     }
 
     /// Chain an `OPTIONS` handler.
@@ -178,7 +195,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.options(doc.handler), options: Some(doc.operation), ..self }
+        let Self { method_router, options: _, get, post, put, delete, patch, head, trace, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.options(doc.handler), options: Some(doc.operation), get, post, put, delete, patch, head, trace, connect, components: comps }
     }
 
     /// Chain a `TRACE` handler.
@@ -187,7 +206,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.trace(doc.handler), trace: Some(doc.operation), ..self }
+        let Self { method_router, trace: _, get, post, put, delete, patch, head, options, connect, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.trace(doc.handler), trace: Some(doc.operation), get, post, put, delete, patch, head, options, connect, components: comps }
     }
 
     /// Chain a `CONNECT` handler.
@@ -196,7 +217,9 @@ where
         H: Handler<T, S>,
         T: 'static,
     {
-        Self { method_router: self.method_router.connect(doc.handler), connect: Some(doc.operation), ..self }
+        let Self { method_router, connect: _, get, post, put, delete, patch, head, options, trace, components: mut comps } = self;
+        merge_components(&mut comps, doc.components);
+        Self { method_router: method_router.connect(doc.handler), connect: Some(doc.operation), get, post, put, delete, patch, head, options, trace, components: comps }
     }
 
     /// Add a fallback handler.
@@ -224,7 +247,61 @@ where
             get: self.get, post: self.post, put: self.put,
             delete: self.delete, patch: self.patch, head: self.head,
             options: self.options, trace: self.trace, connect: self.connect,
+            components: self.components,
         }
+    }
+}
+
+/// Merge reusable components from `source` into `target`.
+///
+/// Uses first-write-wins semantics: if a key already exists in `target`,
+/// the `source` value is ignored. This ensures that explicit user
+/// configuration (via `with_security_scheme` etc.) takes precedence
+/// over auto-registered entries from extractors.
+pub(crate) fn merge_components(target: &mut Components, source: Components) {
+    if let Some(src) = source.schemas {
+        let dst = target.schemas.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.responses {
+        let dst = target.responses.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.parameters {
+        let dst = target.parameters.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.examples {
+        let dst = target.examples.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.request_bodies {
+        let dst = target.request_bodies.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.headers {
+        let dst = target.headers.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.security_schemes {
+        let dst = target.security_schemes.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.links {
+        let dst = target.links.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.callbacks {
+        let dst = target.callbacks.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.path_items {
+        let dst = target.path_items.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
+    }
+    if let Some(src) = source.media_types {
+        let dst = target.media_types.get_or_insert_with(indexmap::IndexMap::new);
+        for (k, v) in src { dst.entry(k).or_insert(v); }
     }
 }
 
@@ -266,7 +343,7 @@ mod tests {
     #[test]
     fn split_returns_router_and_item() {
         let dmr: DocMethodRouter = crate::routing::get(DocHandler::new(a, op("a")));
-        let (router, pi) = dmr.split();
+        let (router, pi, _components) = dmr.split();
         assert!(pi.get.is_some());
         drop(router);
     }
