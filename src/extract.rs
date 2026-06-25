@@ -13,15 +13,25 @@ use crate::openapi::to_openapi_schema;
 pub trait OpenApiExtractor {
     fn operation_input(ctx: &mut GenContext, operation: &mut Operation);
     fn inferred_early_responses(
-        _ctx: &mut GenContext, _operation: &mut Operation,
-    ) -> Vec<(Option<String>, Response)> { Vec::new() }
+        _ctx: &mut GenContext,
+        _operation: &mut Operation,
+    ) -> Vec<(Option<String>, Response)> {
+        Vec::new()
+    }
 }
 
 /// Trait for response types.
 pub trait OpenApiOutput {
     type Inner;
-    fn operation_response(_ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> { None }
-    fn inferred_responses(_ctx: &mut GenContext, _operation: &mut Operation) -> Vec<(Option<String>, Response)> { Vec::new() }
+    fn operation_response(_ctx: &mut GenContext, _operation: &mut Operation) -> Option<Response> {
+        None
+    }
+    fn inferred_responses(
+        _ctx: &mut GenContext,
+        _operation: &mut Operation,
+    ) -> Vec<(Option<String>, Response)> {
+        Vec::new()
+    }
 }
 
 // --- Ignored types ---
@@ -75,21 +85,47 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Json<T> {
         let schema = ctx.schema.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema: Some(RefOr::Item(openapi_schema)),
-            ..Default::default()
-        });
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(openapi_schema)),
+                ..Default::default()
+            },
+        );
         operation.request_body = Some(RefOr::Item(RequestBody {
-            description: None, content, required: Some(true),
+            description: None,
+            content,
+            required: Some(true),
         }));
     }
 
     #[cfg(feature = "opinionated-errors")]
-    fn inferred_early_responses(_: &mut GenContext, _: &mut Operation) -> Vec<(Option<String>, Response)> {
+    fn inferred_early_responses(
+        _: &mut GenContext,
+        _: &mut Operation,
+    ) -> Vec<(Option<String>, Response)> {
         vec![
-            (Some("400".into()), Response { description: "Bad Request — invalid JSON".into(), ..Default::default() }),
-            (Some("415".into()), Response { description: "Unsupported Media Type".into(), ..Default::default() }),
-            (Some("422".into()), Response { description: "Unprocessable Entity — validation failed".into(), ..Default::default() }),
+            (
+                Some("400".into()),
+                Response {
+                    description: "Bad Request — invalid JSON".into(),
+                    ..Default::default()
+                },
+            ),
+            (
+                Some("415".into()),
+                Response {
+                    description: "Unsupported Media Type".into(),
+                    ..Default::default()
+                },
+            ),
+            (
+                Some("422".into()),
+                Response {
+                    description: "Unprocessable Entity — validation failed".into(),
+                    ..Default::default()
+                },
+            ),
         ]
     }
 }
@@ -101,12 +137,17 @@ impl<T: JsonSchema> OpenApiExtractor for axum::Form<T> {
         let schema = ctx.schema.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
-        content.insert("application/x-www-form-urlencoded".to_string(), MediaType {
-            schema: Some(RefOr::Item(openapi_schema)),
-            ..Default::default()
-        });
+        content.insert(
+            "application/x-www-form-urlencoded".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(openapi_schema)),
+                ..Default::default()
+            },
+        );
         operation.request_body = Some(RefOr::Item(RequestBody {
-            description: None, content, required: Some(true),
+            description: None,
+            content,
+            required: Some(true),
         }));
     }
 }
@@ -119,16 +160,28 @@ impl<T: JsonSchema> OpenApiOutput for axum::Json<T> {
         let schema = ctx.schema.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema: Some(RefOr::Item(openapi_schema)),
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(openapi_schema)),
+                ..Default::default()
+            },
+        );
+        Some(Response {
+            description: "Successful response".to_string(),
+            content: Some(content),
             ..Default::default()
-        });
-        Some(Response { description: String::new(), content: Some(content), ..Default::default() })
+        })
     }
-    fn inferred_responses(ctx: &mut GenContext, operation: &mut Operation) -> Vec<(Option<String>, Response)> {
+    fn inferred_responses(
+        ctx: &mut GenContext,
+        operation: &mut Operation,
+    ) -> Vec<(Option<String>, Response)> {
         if let Some(resp) = Self::operation_response(ctx, operation) {
             vec![(Some("200".into()), resp)]
-        } else { Vec::new() }
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -138,11 +191,18 @@ impl<T: JsonSchema> OpenApiOutput for (axum::http::StatusCode, axum::Json<T>) {
         let schema = ctx.schema.subschema_for::<T>();
         let openapi_schema = to_openapi_schema(&schema);
         let mut content = IndexMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema: Some(RefOr::Item(openapi_schema)),
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema: Some(RefOr::Item(openapi_schema)),
+                ..Default::default()
+            },
+        );
+        Some(Response {
+            description: "Successful response".to_string(),
+            content: Some(content),
             ..Default::default()
-        });
-        Some(Response { description: "Successful response".to_string(), content: Some(content), ..Default::default() })
+        })
     }
 }
 
@@ -153,36 +213,61 @@ pub(crate) fn parameters_from_schema(schema: &Schema, location: ParameterIn) -> 
     parameters_from_schema_inner(schema, location, "value")
 }
 
-fn parameters_from_schema_inner(schema: &Schema, location: ParameterIn, default_name: &str) -> Vec<Parameter> {
+fn parameters_from_schema_inner(
+    schema: &Schema,
+    location: ParameterIn,
+    default_name: &str,
+) -> Vec<Parameter> {
     let mut params = Vec::new();
     // Try to extract object properties if present
     let has_properties = match schema {
-        Schema::Object(obj) => obj.schema_data.get("properties").and_then(|p| p.as_object()).map(|props| {
-            let required_set: std::collections::HashSet<String> = obj.schema_data.get("required")
-                .and_then(|r| r.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                .unwrap_or_default();
-            for (name, prop_schema) in props {
-                let description = prop_schema.get("description").and_then(|d| d.as_str()).map(String::from);
-                let prop_required = location == ParameterIn::Path || required_set.contains(name);
-                let style = match location {
-                    ParameterIn::Path | ParameterIn::Header => Some(Style::Simple),
-                    ParameterIn::Query | ParameterIn::Cookie => Some(Style::Form),
-                    _ => None,
-                };
-                let schema_data = if let serde_json::Value::Object(map) = prop_schema.clone() {
-                    map
-                } else { serde_json::Map::new() };
-                params.push(Parameter {
-                    name: name.clone(), location: location.clone(), description,
-                    required: Some(prop_required), style,
-                    schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
-                        schema_data, ..Default::default()
-                    }))),
-                    ..Default::default()
-                });
-            }
-        }).is_some(),
+        Schema::Object(obj) => obj
+            .schema_data
+            .get("properties")
+            .and_then(|p| p.as_object())
+            .map(|props| {
+                let required_set: std::collections::HashSet<String> = obj
+                    .schema_data
+                    .get("required")
+                    .and_then(|r| r.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for (name, prop_schema) in props {
+                    let description = prop_schema
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .map(String::from);
+                    let prop_required =
+                        location == ParameterIn::Path || required_set.contains(name);
+                    let style = match location {
+                        ParameterIn::Path | ParameterIn::Header => Some(Style::Simple),
+                        ParameterIn::Query | ParameterIn::Cookie => Some(Style::Form),
+                        _ => None,
+                    };
+                    let schema_data = if let serde_json::Value::Object(map) = prop_schema.clone() {
+                        map
+                    } else {
+                        serde_json::Map::new()
+                    };
+                    params.push(Parameter {
+                        name: name.clone(),
+                        location: location.clone(),
+                        description,
+                        required: Some(prop_required),
+                        style,
+                        schema: Some(RefOr::Item(Schema::Object(openapi3_rs::SchemaObject {
+                            schema_data,
+                            ..Default::default()
+                        }))),
+                        ..Default::default()
+                    });
+                }
+            })
+            .is_some(),
         _ => false,
     };
 
@@ -194,8 +279,11 @@ fn parameters_from_schema_inner(schema: &Schema, location: ParameterIn, default_
             _ => None,
         };
         params.push(Parameter {
-            name: default_name.to_string(), location: location.clone(), description: None,
-            required: Some(location == ParameterIn::Path), style,
+            name: default_name.to_string(),
+            location: location.clone(),
+            description: None,
+            required: Some(location == ParameterIn::Path),
+            style,
             schema: Some(RefOr::Item(schema.clone())),
             ..Default::default()
         });
@@ -206,9 +294,9 @@ fn parameters_from_schema_inner(schema: &Schema, location: ParameterIn, default_
 #[cfg(test)]
 mod tests {
     use super::*;
-    use schemars::{schema_for, JsonSchema};
-    use serde::{Deserialize, Serialize};
     use openapi3_rs::{ParameterIn, Schema as OasSchema};
+    use schemars::{JsonSchema, schema_for};
+    use serde::{Deserialize, Serialize};
 
     #[derive(JsonSchema, Serialize, Deserialize)]
     struct TestParams {
@@ -237,7 +325,12 @@ mod tests {
         let params = parameters_from_schema(&oas, ParameterIn::Path);
 
         for p in &params {
-            assert_eq!(p.required, Some(true), "path param {} should be required", p.name);
+            assert_eq!(
+                p.required,
+                Some(true),
+                "path param {} should be required",
+                p.name
+            );
         }
     }
 
@@ -256,8 +349,10 @@ mod tests {
         let params = parameters_from_schema(&oas, ParameterIn::Header);
 
         for p in &params {
-            assert!(matches!(p.style, Some(openapi3_rs::Style::Simple)),
-                "header param should have Simple style");
+            assert!(
+                matches!(p.style, Some(openapi3_rs::Style::Simple)),
+                "header param should have Simple style"
+            );
         }
     }
 }

@@ -9,7 +9,7 @@
 //!
 //! Run: `cargo run --example todo_api`
 
-use axoas::{openapi, route, DocRouter};
+use axoas::{DocRouter, openapi, route};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use schemars::JsonSchema;
@@ -94,7 +94,11 @@ async fn create_todo(
     if payload.title.trim().is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            axum::Json(Todo { id: 0, title: String::new(), completed: false }),
+            axum::Json(Todo {
+                id: 0,
+                title: String::new(),
+                completed: false,
+            }),
         );
     }
 
@@ -102,7 +106,11 @@ async fn create_todo(
     let id = *next_id;
     *next_id += 1;
 
-    let todo = Todo { id, title: payload.title, completed: false };
+    let todo = Todo {
+        id,
+        title: payload.title,
+        completed: false,
+    };
     state.todos.lock().unwrap().insert(id, todo.clone());
 
     (StatusCode::CREATED, axum::Json(todo))
@@ -113,12 +121,13 @@ async fn create_todo(
 // ============================================================
 
 #[openapi(tag = "todos", summary = "Get a todo by ID")]
-async fn get_todo(
-    State(state): State<AppState>,
-    Path(id): Path<u64>,
-) -> axum::Json<Todo> {
+async fn get_todo(State(state): State<AppState>, Path(id): Path<u64>) -> axum::Json<Todo> {
     let todos = state.todos.lock().unwrap();
-    let todo = todos.get(&id).cloned().unwrap_or(Todo { id: 0, title: String::new(), completed: false });
+    let todo = todos.get(&id).cloned().unwrap_or(Todo {
+        id: 0,
+        title: String::new(),
+        completed: false,
+    });
     axum::Json(todo)
 }
 
@@ -130,11 +139,19 @@ async fn update_todo(
 ) -> axum::Json<Todo> {
     let mut todos = state.todos.lock().unwrap();
     if let Some(todo) = todos.get_mut(&id) {
-        if let Some(title) = payload.title { todo.title = title; }
-        if let Some(completed) = payload.completed { todo.completed = completed; }
+        if let Some(title) = payload.title {
+            todo.title = title;
+        }
+        if let Some(completed) = payload.completed {
+            todo.completed = completed;
+        }
         axum::Json(todo.clone())
     } else {
-        axum::Json(Todo { id: 0, title: String::new(), completed: false })
+        axum::Json(Todo {
+            id: 0,
+            title: String::new(),
+            completed: false,
+        })
     }
 }
 
@@ -143,10 +160,7 @@ async fn update_todo(
     summary = "Delete a todo",
     description = "Deletes a todo by ID. Returns 204 on success."
 )]
-async fn delete_todo(
-    State(state): State<AppState>,
-    Path(id): Path<u64>,
-) -> StatusCode {
+async fn delete_todo(State(state): State<AppState>, Path(id): Path<u64>) -> StatusCode {
     if state.todos.lock().unwrap().remove(&id).is_some() {
         StatusCode::NO_CONTENT
     } else {
@@ -173,19 +187,23 @@ async fn main() {
 
     // Build the todos sub-router
     let todos_router = DocRouter::new()
-        .route("/todos", axoas::routing::get(route!(list_todos))
-            .post(route!(create_todo)))
-        .route("/todos/{id}", axoas::routing::get(route!(get_todo))
-            .put(route!(update_todo))
-            .delete(route!(delete_todo)));
+        .route(
+            "/todos",
+            axoas::routing::get(route!(list_todos)).post(route!(create_todo)),
+        )
+        .route(
+            "/todos/{id}",
+            axoas::routing::get(route!(get_todo))
+                .put(route!(update_todo))
+                .delete(route!(delete_todo)),
+        );
 
     // Build the health sub-router
-    let health_router = DocRouter::new()
-        .route("/health", axoas::routing::get(route!(health_check)));
+    let health_router =
+        DocRouter::new().route("/health", axoas::routing::get(route!(health_check)));
 
     // Merge sub-routers
-    let api_router = health_router
-        .merge(todos_router);
+    let api_router = health_router.merge(todos_router);
 
     // Build the full app with customized metadata
     let app = DocRouter::new()
@@ -205,7 +223,6 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("Todo API at http://localhost:3000/openapi.json");
-
 
     axum::serve(listener, app).await.unwrap();
 }
